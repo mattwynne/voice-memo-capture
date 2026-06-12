@@ -18,14 +18,20 @@ hourly as a safety net.
 ## Install
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/mattwynne/voice-memo-capture/main/install-from-github.sh | bash
+```
+
+The installer downloads the latest source from GitHub, builds the binary to
+`~/.local/bin/voice-memo-capture`, writes a default config, helps you grant
+Full Disk Access, verifies access, and loads the launchd agent.
+
+If you prefer to inspect the source first:
+
+```bash
 git clone https://github.com/mattwynne/voice-memo-capture.git
 cd voice-memo-capture
 make install
 ```
-
-`make install` builds the binary to `~/.local/bin/voice-memo-capture`, writes
-a default config, helps you grant Full Disk Access, verifies access, and loads
-the launchd agent.
 
 ### Required: grant Full Disk Access
 
