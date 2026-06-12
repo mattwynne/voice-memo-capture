@@ -8,7 +8,8 @@ CONFIG_DIR="$HOME/.config/voice-memo-capture"
 CONFIG="$CONFIG_DIR/config.toml"
 LOG="$HOME/Library/Logs/voice-memo-capture.log"
 WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
-AGENT="$HOME/Library/LaunchAgents/com.matt.voicememocapture.plist"
+AGENT="$HOME/Library/LaunchAgents/net.mattwynne.voicememocapture.plist"
+LEGACY_AGENT="$HOME/Library/LaunchAgents/com.matt.voicememocapture.plist"
 
 assist_full_disk_access() {
   if [ "${VMC_SKIP_FDA_PROMPT:-}" = "1" ] || [ ! -t 0 ]; then
@@ -87,13 +88,17 @@ mkdir -p "$HOME/Library/LaunchAgents"
 sed -e "s|__BINARY__|$BINARY|g" \
     -e "s|__WATCHDIR__|$WATCHDIR|g" \
     -e "s|__LOG__|$LOG|g" \
-    "$REPO_DIR/com.matt.voicememocapture.plist" > "$AGENT"
+    "$REPO_DIR/net.mattwynne.voicememocapture.plist" > "$AGENT"
 
 assist_full_disk_access
 verify_access
 
-# reload cleanly if already loaded
+# reload cleanly if already loaded, and remove the pre-rename LaunchAgent if present
 launchctl unload "$AGENT" 2>/dev/null || true
+if [ -f "$LEGACY_AGENT" ]; then
+  launchctl unload "$LEGACY_AGENT" 2>/dev/null || true
+  rm -f "$LEGACY_AGENT"
+fi
 launchctl load -w "$AGENT"
 
 cat <<EOF

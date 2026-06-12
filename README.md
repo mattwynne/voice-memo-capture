@@ -67,7 +67,7 @@ default shown:
 
 ## How it runs
 
-A launchd agent (`com.matt.voicememocapture`) triggers the tool when the
+A launchd agent (`net.mattwynne.voicememocapture`) triggers the tool when the
 recordings folder changes and once an hour. Each run is idempotent: a JSON
 ledger at `~/.local/state/voice-memo-capture/processed.json` records what's
 already written, and memos whose transcript isn't ready yet are retried on the

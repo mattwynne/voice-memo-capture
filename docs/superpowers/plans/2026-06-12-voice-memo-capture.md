@@ -27,7 +27,7 @@ Module path: `github.com/mattwynne/voice-memo-capture`.
 
 Config resolution order (refinement of the spec): `$VOICE_MEMO_CAPTURE_CONFIG`, else `~/.config/voice-memo-capture/config.toml`, else built-in defaults. (Cleaner than "next to the binary.")
 
-Install paths (no sudo): binary → `~/.local/bin/voice-memo-capture`; LaunchAgent → `~/Library/LaunchAgents/com.matt.voicememocapture.plist`.
+Install paths (no sudo): binary → `~/.local/bin/voice-memo-capture`; LaunchAgent → `~/Library/LaunchAgents/net.mattwynne.voicememocapture.plist`.
 
 Fixture note (refinement of the spec): the transcript test builds a **synthetic** fixture (filler bytes + valid sentinel JSON + trailing bytes) rather than committing a real recording — deterministic and avoids shipping personal audio.
 
@@ -52,7 +52,7 @@ voice-memo-capture/
 │   ├── memos/memos.go + memos_test.go        # read-only DB query + path resolve
 │   ├── ledger/ledger.go + ledger_test.go     # JSON processed-id set
 │   └── output/output.go + output_test.go     # filename + markdown render/write
-├── com.matt.voicememocapture.plist           # template w/ __BINARY__ __WATCHDIR__ __LOG__
+├── net.mattwynne.voicememocapture.plist           # template w/ __BINARY__ __WATCHDIR__ __LOG__
 ├── install.sh
 └── uninstall.sh
 ```
@@ -1358,13 +1358,13 @@ git commit -m "feat(cmd): wire run-once pipeline with FDA-aware error handling"
 ## Task 8: launchd agent + install/uninstall scripts
 
 **Files:**
-- Create: `com.matt.voicememocapture.plist` (template)
+- Create: `net.mattwynne.voicememocapture.plist` (template)
 - Create: `install.sh`
 - Create: `uninstall.sh`
 
 - [ ] **Step 1: Add the LaunchAgent template**
 
-Create `com.matt.voicememocapture.plist` (placeholders substituted at install):
+Create `net.mattwynne.voicememocapture.plist` (placeholders substituted at install):
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -1372,7 +1372,7 @@ Create `com.matt.voicememocapture.plist` (placeholders substituted at install):
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.matt.voicememocapture</string>
+  <string>net.mattwynne.voicememocapture</string>
   <key>ProgramArguments</key>
   <array>
     <string>__BINARY__</string>
@@ -1407,7 +1407,7 @@ CONFIG_DIR="$HOME/.config/voice-memo-capture"
 CONFIG="$CONFIG_DIR/config.toml"
 LOG="$HOME/Library/Logs/voice-memo-capture.log"
 WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
-AGENT="$HOME/Library/LaunchAgents/com.matt.voicememocapture.plist"
+AGENT="$HOME/Library/LaunchAgents/net.mattwynne.voicememocapture.plist"
 
 echo "==> Building"
 mkdir -p "$BIN_DIR"
@@ -1430,7 +1430,7 @@ mkdir -p "$HOME/Library/LaunchAgents"
 sed -e "s|__BINARY__|$BINARY|g" \
     -e "s|__WATCHDIR__|$WATCHDIR|g" \
     -e "s|__LOG__|$LOG|g" \
-    "$REPO_DIR/com.matt.voicememocapture.plist" > "$AGENT"
+    "$REPO_DIR/net.mattwynne.voicememocapture.plist" > "$AGENT"
 
 # reload cleanly if already loaded
 launchctl unload "$AGENT" 2>/dev/null || true
@@ -1459,7 +1459,7 @@ Create `uninstall.sh` (and `chmod +x uninstall.sh`):
 set -euo pipefail
 
 BINARY="$HOME/.local/bin/voice-memo-capture"
-AGENT="$HOME/Library/LaunchAgents/com.matt.voicememocapture.plist"
+AGENT="$HOME/Library/LaunchAgents/net.mattwynne.voicememocapture.plist"
 
 if [ -f "$AGENT" ]; then
   launchctl unload "$AGENT" 2>/dev/null || true
@@ -1594,7 +1594,7 @@ default shown:
 
 ## How it runs
 
-A launchd agent (`com.matt.voicememocapture`) triggers the tool when the
+A launchd agent (`net.mattwynne.voicememocapture`) triggers the tool when the
 recordings folder changes and once an hour. Each run is idempotent: a JSON
 ledger at `~/.local/state/voice-memo-capture/processed.json` records what's
 already written, and memos whose transcript isn't ready yet are retried on the

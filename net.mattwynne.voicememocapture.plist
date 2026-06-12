@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.matt.voicememocapture</string>
+  <string>net.mattwynne.voicememocapture</string>
   <key>ProgramArguments</key>
   <array>
     <string>__BINARY__</string>

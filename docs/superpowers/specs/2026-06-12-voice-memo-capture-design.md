@@ -117,7 +117,7 @@ voice-memo-capture/
 │   └── output/        output.go        # markdown writer
 ├── install.sh                      # build, install binary, load agent, print FDA steps
 ├── uninstall.sh                    # unload + remove agent, remove binary
-└── com.matt.voicememocapture.plist # LaunchAgent template
+└── net.mattwynne.voicememocapture.plist # LaunchAgent template
 ```
 
 ### Dependencies (both pure Go — static binary, no cgo)
