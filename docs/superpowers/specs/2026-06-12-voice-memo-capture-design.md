@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-12
 **Status:** Approved (pending spec review)
+**Language:** Go
 
 ## Goal
 
@@ -42,24 +43,42 @@ transcript directly — no Whisper, no cloud, no model downloads.
 
 | Decision | Choice |
 | --- | --- |
-| Code structure | New own repo; vendor pedramamini's CC0 script with credit |
+| Language | **Go** — single static binary with its own TCC identity |
+| Reuse strategy | **Port** the ~90-line read-only kernel from pedramamini's CC0 script (credit retained); we do not vendor Python |
 | Output target | Plain Markdown folder, one file per memo |
 | Transcription | **Apple native only** — no Whisper dependency |
 | Trigger | launchd **WatchPaths** (instant) + **hourly sweep** (safety net) |
-| Configuration | All tunables in a `config.toml` (stdlib `tomllib`) |
+| Configuration | All tunables in a `config.toml` |
+
+### Why Go (vs Python / Swift)
+
+- A compiled binary gets its **own Full Disk Access identity** instead of
+  granting FDA to a general `python3` that every script would inherit.
+- The kernel we reuse is small and portable: the transcript extractor
+  deliberately **avoids parsing MP4 containers** — it byte-scans for a JSON
+  sentinel and brace-balances — so it ports cleanly with no MP4 library.
+- Go gives the simplest toolchain (`go build` → one static binary, no Xcode)
+  and pure-Go dependencies keep the binary static (no cgo).
+- Trade-off accepted vs Swift: Go stays headless (no future menu-bar/
+  notification UI), and a bare binary's TCC grant is keyed to its code hash,
+  so a rebuild may require re-granting FDA (see Full Disk Access section).
 
 ## Architecture
 
-Two parts:
+A single Go binary, **run once per invocation**: scan → process → exit.
+launchd owns the scheduling (watch + interval); the binary itself is not a
+long-running process. This keeps it simple and naturally idempotent.
 
-1. **`voice_memo_capture.py`** — our orchestration script (dependency-free,
-   Python 3.11+ stdlib only). Reads config, queries the DB, extracts native
-   transcripts, writes Markdown, maintains an idempotency ledger.
-2. **launchd LaunchAgent** — keeps the script running unattended: fires on
-   folder change and on an hourly interval.
+Internal packages, each with one responsibility:
 
-It vendors **`voice_memos.py`** from pedramamini's gist (CC0) for the
-DB-query + `tsrp`-atom-extraction logic, rather than reimplementing it.
+- `internal/config` — load `config.toml`, merge over documented defaults.
+- `internal/memos` — open `CloudRecordings.db` read-only, query recordings,
+  resolve each memo's real audio path (`.m4a` vs `.qta`).
+- `internal/transcript` — **ported kernel**: byte-scan the audio file for the
+  `tsrp` JSON sentinel, brace-balance, parse, and flatten `runs[::2]` to text.
+- `internal/ledger` — JSON idempotency ledger of processed memo IDs.
+- `internal/output` — render and write the per-memo Markdown file.
+- `cmd/voice-memo-capture` — entrypoint wiring the above together.
 
 ### Repo layout (`~/git/mattwynne/voice-memo-capture`)
 
@@ -68,16 +87,33 @@ voice-memo-capture/
 ├── README.md                       # setup + the Full Disk Access step
 ├── LICENSE                         # CC0 (matches upstream)
 ├── CREDITS.md                      # link back to pedramamini's gist
+├── go.mod
+├── go.sum
+├── Makefile                        # build / test / install / uninstall
 ├── config.example.toml             # documented defaults, copied on install
-├── vendor/
-│   └── voice_memos.py              # pedramamini's CC0 script, vendored as-is
-├── voice_memo_capture.py           # our script: extraction → markdown
-├── install.sh                      # writes + loads LaunchAgent, prints FDA steps
-├── uninstall.sh                    # unloads + removes the agent
-├── com.matt.voicememocapture.plist # LaunchAgent template
-└── tests/
-    └── test_capture.py             # unit tests w/ committed fixtures
+├── cmd/
+│   └── voice-memo-capture/
+│       └── main.go                 # entrypoint: load config, run once, exit
+├── internal/
+│   ├── config/        config.go        # TOML load + defaults
+│   ├── memos/         memos.go         # read-only DB query + path resolution
+│   ├── transcript/    transcript.go    # tsrp byte-scanner + JSON (ported)
+│   │                  transcript_test.go
+│   │                  testdata/sample_with_tsrp.m4a   # committed fixture
+│   ├── ledger/        ledger.go        # idempotency state
+│   └── output/        output.go        # markdown writer
+├── install.sh                      # build, install binary, load agent, print FDA steps
+├── uninstall.sh                    # unload + remove agent, remove binary
+└── com.matt.voicememocapture.plist # LaunchAgent template
 ```
+
+### Dependencies (both pure Go — static binary, no cgo)
+
+- `modernc.org/sqlite` — read-only access to `CloudRecordings.db`.
+- `github.com/BurntSushi/toml` — parse `config.toml` (Go has no stdlib TOML).
+
+Everything else (byte scanning, `encoding/json`, file IO, Markdown text) is
+standard library.
 
 ## Data flow
 
@@ -86,15 +122,16 @@ New memo syncs from iPhone → appears in the Recordings folder
         │
 launchd fires (WatchPaths on the folder, OR the hourly sweep)
         │
-voice_memo_capture.py:
+voice-memo-capture (runs once):
   1. load config.toml (fall back to defaults for missing keys)
-  2. query CloudRecordings.db → (id, title, date, duration, path, folder)
+  2. open CloudRecordings.db read-only → (id, title, date, duration, path, folder)
   3. for each memo not in the ledger:
        - resolve audio path; if not downloaded from iCloud yet → skip
-       - extract Apple native transcript (tsrp atom) via vendored code
+       - byte-scan audio for the tsrp transcript JSON, flatten to text
        - if transcript missing → skip, DO NOT ledger (retry next run)
        - else → write <output>/{date} {time} - {title}.md
                 add memo id to the ledger
+  4. exit
         │
 Markdown file appears in the configured output folder
 ```
@@ -121,7 +158,7 @@ file = "~/Library/Logs/voice-memo-capture.log"
 level = "info"                   # "debug" | "info" | "warn" | "error"
 ```
 
-- Config is located next to the script, or via `$VOICE_MEMO_CAPTURE_CONFIG`.
+- Config path: next to the binary, or via `$VOICE_MEMO_CAPTURE_CONFIG`.
 - Missing keys fall back to these documented defaults; a partial or empty
   config still works.
 - `install.sh` copies `config.example.toml` → `config.toml` on first run if
@@ -141,15 +178,25 @@ level = "info"                   # "debug" | "info" | "warn" | "error"
 
 ## Full Disk Access (the one manual step)
 
-The capture service reads a TCC-protected folder, so the **Python interpreter
-that launchd runs** must have Full Disk Access. `install.sh` prints the exact
-binary path to add and walks the user through:
+The binary reads a TCC-protected folder, so **the installed binary itself**
+must be granted Full Disk Access. `install.sh`:
 
-> System Settings → Privacy & Security → Full Disk Access → add `<python3 path>`
+1. builds and installs the binary to a stable path (e.g.
+   `/usr/local/bin/voice-memo-capture`),
+2. ad-hoc code-signs it (`codesign -s -`),
+3. prints that exact path and walks the user through:
 
-This is unavoidable for any tool touching this folder. Everything else is
-automatic. If FDA is absent at runtime, the service detects the
-`Operation not permitted` error, logs a clear instruction, and exits cleanly.
+   > System Settings → Privacy & Security → Full Disk Access → add
+   > `/usr/local/bin/voice-memo-capture`
+
+**Caveat (honest):** for a bare ad-hoc-signed binary, TCC keys the grant to
+the code hash, so **rebuilding the binary may require re-adding it** to the
+FDA list. For a tool rebuilt rarely this is a minor one-off. Escaping it would
+mean a Developer ID signature or wrapping in a `.app` bundle — out of scope
+for v1.
+
+If FDA is absent at runtime, the binary detects the `operation not permitted`
+error, logs a clear "grant Full Disk Access to `<path>`" message, and exits 0.
 
 ## Idempotency & state
 
@@ -163,22 +210,22 @@ finishes on-device transcription. Safe to run any number of times.
 | Condition | Behavior |
 | --- | --- |
 | Folder unreadable (FDA missing) | Log clear "grant Full Disk Access" message; exit 0 |
-| `CloudRecordings.db` locked (app writing) | Catch, log at debug, retry next run |
+| `CloudRecordings.db` locked (app writing) | Open read-only / retry; log at debug, retry next run |
 | Audio not yet downloaded from iCloud | Skip memo, retry next run |
-| Missing/malformed `tsrp` transcript atom | Skip that memo, log, continue with others |
-| Any per-memo exception | Isolated — never aborts the whole batch |
+| Missing/malformed `tsrp` transcript | Skip that memo, log, continue with others |
+| Any per-memo error | Isolated — never aborts the whole batch |
 
 All activity logged to the configured log file.
 
 ## Testing
 
-Unit tests (`python3 -m unittest`), no dependency on the real library:
+Go tests (`go test ./...`), no dependency on the real library:
 
 - Filename generation from `filename_format` tokens, including title
   sanitization (slashes, length).
 - Ledger skip logic: a ledgered id is not rewritten; an un-ledgered id is.
-- Native transcript extraction against a small **committed fixture** file
-  containing a `tsrp` atom.
+- Transcript extraction against a small **committed fixture** audio file
+  containing a `tsrp` atom (`internal/transcript/testdata/`).
 - Config loading: partial config merges over defaults; missing file uses
   defaults.
 
@@ -189,9 +236,12 @@ Unit tests (`python3 -m unittest`), no dependency on the real library:
 - Logseq / Obsidian integration (plain Markdown only; can point other tools
   at the folder later).
 - Editing memos, renaming, or writing back to the Voice Memos DB.
+- Menu-bar UI, notifications, Developer ID signing, `.app` bundle.
 
 ## Credits
 
-Built on [pedramamini's Voice Memos gist](https://gist.github.com/pedramamini/f4efacfe7080e07e18f54e13d8243dc1)
-(CC0). The vendored `voice_memos.py` provides DB querying and `tsrp`-atom
-transcript extraction.
+Logic ported from
+[pedramamini's Voice Memos gist](https://gist.github.com/pedramamini/f4efacfe7080e07e18f54e13d8243dc1)
+(CC0): the `CloudRecordings.db` querying, audio-path resolution, and the
+`tsrp` byte-scanning transcript extractor are reimplemented in Go from that
+script.
