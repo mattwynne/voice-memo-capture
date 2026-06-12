@@ -49,6 +49,16 @@ transcript directly — no Whisper, no cloud, no model downloads.
 | Transcription | **Apple native only** — no Whisper dependency |
 | Trigger | launchd **WatchPaths** (instant) + **hourly sweep** (safety net) |
 | Configuration | All tunables in a `config.toml` |
+| Publishing | **Public** GitHub repo under `mattwynne` |
+| License | **MIT** for our code, crediting the original gist |
+| Docs / CI | Tidy README with install instructions; GitHub Actions CI |
+
+### Licensing note
+
+The upstream gist is **CC0** (public domain dedication), which places no
+conditions on reuse. We are therefore free to license our Go derivative under
+**MIT**. We credit the original gist (link in `CREDITS.md` and `README.md`) as
+the author requested, though CC0 imposes no legal obligation to do so.
 
 ### Why Go (vs Python / Swift)
 
@@ -84,9 +94,12 @@ Internal packages, each with one responsibility:
 
 ```
 voice-memo-capture/
-├── README.md                       # setup + the Full Disk Access step
-├── LICENSE                         # CC0 (matches upstream)
-├── CREDITS.md                      # link back to pedramamini's gist
+├── README.md                       # overview, install, FDA step, config, uninstall
+├── LICENSE                         # MIT (our code)
+├── CREDITS.md                      # link back to pedramamini's gist (CC0)
+├── .github/
+│   └── workflows/
+│       └── ci.yml                  # GitHub Actions: build, vet, test
 ├── go.mod
 ├── go.sum
 ├── Makefile                        # build / test / install / uninstall
@@ -228,6 +241,35 @@ Go tests (`go test ./...`), no dependency on the real library:
   containing a `tsrp` atom (`internal/transcript/testdata/`).
 - Config loading: partial config merges over defaults; missing file uses
   defaults.
+
+## Publishing, Docs & CI
+
+**Public repo.** Created public on GitHub under `mattwynne/voice-memo-capture`
+(via `gh repo create`), pushed from the existing local history.
+
+**`LICENSE`** — standard MIT text, `Copyright (c) 2026 Matt Wynne`.
+
+**`CREDITS.md`** — credits pedramamini's gist (CC0) and explains which logic
+was ported (DB query, audio-path resolution, `tsrp` extractor).
+
+**`README.md`** — tidy and skimmable:
+- One-paragraph what/why (record on phone → transcript appears in a folder).
+- Requirements (macOS 15+ for native transcripts; Go to build).
+- Install: `git clone` → `make install` (builds, installs binary, loads the
+  LaunchAgent, copies `config.example.toml`).
+- **The Full Disk Access step**, called out prominently with the exact path,
+  since nothing works without it.
+- Configuration reference (the `config.toml` keys).
+- How it runs (launchd watch + hourly sweep), where logs go.
+- Uninstall: `make uninstall`.
+- Credit + link to the original gist.
+
+**CI (`.github/workflows/ci.yml`)** — GitHub Actions on push and PR:
+- `runs-on: macos-latest` (the transcript fixture test and stdlib paths are
+  macOS-oriented; keeps CI representative of the target platform).
+- Steps: `actions/setup-go`, `go vet ./...`, `go build ./...`,
+  `go test ./...`.
+- A status badge in the README.
 
 ## Out of scope (YAGNI)
 
