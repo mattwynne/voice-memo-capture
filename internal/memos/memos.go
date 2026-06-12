@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -116,5 +117,18 @@ func fileExists(p string) bool {
 // IsPermissionError reports whether err is the macOS TCC "operation not
 // permitted" / permission-denied condition (Full Disk Access not granted).
 func IsPermissionError(err error) bool {
-	return errors.Is(err, fs.ErrPermission)
+	if errors.Is(err, fs.ErrPermission) {
+		return true
+	}
+	if err == nil {
+		return false
+	}
+
+	// When macOS TCC denies access to the Voice Memos group container,
+	// modernc.org/sqlite can surface SQLite code 14 with the misleading text
+	// "unable to open database file: out of memory (14)" rather than an
+	// os.ErrPermission-wrapping error.
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "unable to open database file") &&
+		strings.Contains(s, "(14)")
 }

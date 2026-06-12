@@ -2,6 +2,7 @@ package memos
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,5 +89,12 @@ func TestListMissingAudioLeavesPathEmpty(t *testing.T) {
 	}
 	if got[0].AudioPath != "" {
 		t.Errorf("AudioPath = %q, want empty when file absent", got[0].AudioPath)
+	}
+}
+
+func TestIsPermissionErrorDetectsSQLiteTCCDenial(t *testing.T) {
+	err := errors.New("unable to open database file: out of memory (14)")
+	if !IsPermissionError(err) {
+		t.Fatal("expected SQLite code 14 open failure to be treated as permission/TCC error")
 	}
 }
