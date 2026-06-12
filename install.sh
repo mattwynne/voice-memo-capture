@@ -10,6 +10,62 @@ LOG="$HOME/Library/Logs/voice-memo-capture.log"
 WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
 AGENT="$HOME/Library/LaunchAgents/com.matt.voicememocapture.plist"
 
+assist_full_disk_access() {
+  if [ "${VMC_SKIP_FDA_PROMPT:-}" = "1" ] || [ ! -t 0 ]; then
+    cat <<EOF
+==> Full Disk Access still required
+    Add this binary in System Settings > Privacy & Security > Full Disk Access:
+      $BINARY
+EOF
+    return
+  fi
+
+  cat <<EOF
+
+==> Full Disk Access required
+
+macOS protects the Voice Memos folder. The installer cannot grant this
+permission for you, but it can open the right places.
+
+In the Full Disk Access window:
+  1. Click +
+  2. Press Cmd+Shift+G
+  3. Paste this exact path:
+       $BINARY
+  4. Click Open
+  5. Turn on the toggle for voice-memo-capture
+
+Opening System Settings and revealing the binary now...
+EOF
+
+  open -R "$BINARY" 2>/dev/null || true
+  open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" 2>/dev/null || true
+
+  printf "\nPress Return once Full Disk Access is enabled (or press Return to skip for now): "
+  read -r _
+}
+
+verify_access() {
+  echo "==> Checking Voice Memos access"
+  mkdir -p "$(dirname "$LOG")"
+  touch "$LOG"
+  before_size=$(stat -f%z "$LOG" 2>/dev/null || echo 0)
+
+  "$BINARY" || true
+
+  new_log=$(tail -c +$((before_size + 1)) "$LOG" 2>/dev/null || true)
+  if printf '%s' "$new_log" | grep -q "Full Disk Access not granted"; then
+    cat <<EOF
+    Still blocked by macOS Full Disk Access.
+    You can finish setup later by adding:
+      $BINARY
+    Logs: $LOG
+EOF
+  else
+    echo "    Voice Memos access check completed. Logs: $LOG"
+  fi
+}
+
 echo "==> Building"
 mkdir -p "$BIN_DIR"
 ( cd "$REPO_DIR" && go build -o "$BINARY" ./cmd/voice-memo-capture )
@@ -33,6 +89,9 @@ sed -e "s|__BINARY__|$BINARY|g" \
     -e "s|__LOG__|$LOG|g" \
     "$REPO_DIR/com.matt.voicememocapture.plist" > "$AGENT"
 
+assist_full_disk_access
+verify_access
+
 # reload cleanly if already loaded
 launchctl unload "$AGENT" 2>/dev/null || true
 launchctl load -w "$AGENT"
@@ -41,12 +100,9 @@ cat <<EOF
 
 ==> Installed.
 
-ONE MANUAL STEP — grant Full Disk Access:
-  1. Open System Settings > Privacy & Security > Full Disk Access
-  2. Click +, press Cmd+Shift+G, and paste:
-       $BINARY
-  3. Enable the toggle next to it.
-
-Until you do this, the tool will log "Full Disk Access not granted" and write
-nothing. Logs: $LOG
+Binary: $BINARY
+LaunchAgent: $AGENT
+Config: $CONFIG
+Logs: $LOG
+Output: $HOME/Documents/Voice Memo Transcripts
 EOF

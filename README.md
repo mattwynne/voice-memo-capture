@@ -24,17 +24,21 @@ make install
 ```
 
 `make install` builds the binary to `~/.local/bin/voice-memo-capture`, writes
-a default config, and loads the launchd agent.
+a default config, helps you grant Full Disk Access, verifies access, and loads
+the launchd agent.
 
 ### Required: grant Full Disk Access
 
 The Voice Memos folder is protected by macOS. You must grant the binary Full
-Disk Access once:
+Disk Access once. The installer opens System Settings and reveals the binary;
+when prompted:
 
-1. System Settings → Privacy & Security → **Full Disk Access**
-2. Click **+**, press **Cmd+Shift+G**, and paste:
+1. In System Settings → Privacy & Security → **Full Disk Access**, click **+**.
+2. Press **Cmd+Shift+G** and paste:
    `~/.local/bin/voice-memo-capture`
-3. Enable the toggle.
+3. Click **Open**.
+4. Enable the toggle for `voice-memo-capture`.
+5. Return to Terminal and press Return so the installer can verify access.
 
 Until then the tool logs `Full Disk Access not granted` and writes nothing.
 
