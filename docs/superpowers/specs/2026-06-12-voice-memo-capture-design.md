@@ -1,4 +1,4 @@
-# Voice Memo Daemon — Design
+# Voice Memo Capture — Design
 
 **Date:** 2026-06-12
 **Status:** Approved (pending spec review)
@@ -52,7 +52,7 @@ transcript directly — no Whisper, no cloud, no model downloads.
 
 Two parts:
 
-1. **`voice_memo_daemon.py`** — our orchestration script (dependency-free,
+1. **`voice_memo_capture.py`** — our orchestration script (dependency-free,
    Python 3.11+ stdlib only). Reads config, queries the DB, extracts native
    transcripts, writes Markdown, maintains an idempotency ledger.
 2. **launchd LaunchAgent** — keeps the script running unattended: fires on
@@ -61,22 +61,22 @@ Two parts:
 It vendors **`voice_memos.py`** from pedramamini's gist (CC0) for the
 DB-query + `tsrp`-atom-extraction logic, rather than reimplementing it.
 
-### Repo layout (`~/code/voice-memo-daemon`)
+### Repo layout (`~/git/mattwynne/voice-memo-capture`)
 
 ```
-voice-memo-daemon/
+voice-memo-capture/
 ├── README.md                       # setup + the Full Disk Access step
 ├── LICENSE                         # CC0 (matches upstream)
 ├── CREDITS.md                      # link back to pedramamini's gist
 ├── config.example.toml             # documented defaults, copied on install
 ├── vendor/
 │   └── voice_memos.py              # pedramamini's CC0 script, vendored as-is
-├── voice_memo_daemon.py            # our script: extraction → markdown
+├── voice_memo_capture.py           # our script: extraction → markdown
 ├── install.sh                      # writes + loads LaunchAgent, prints FDA steps
 ├── uninstall.sh                    # unloads + removes the agent
-├── com.matt.voicememodaemon.plist  # LaunchAgent template
+├── com.matt.voicememocapture.plist # LaunchAgent template
 └── tests/
-    └── test_daemon.py              # unit tests w/ committed fixtures
+    └── test_capture.py             # unit tests w/ committed fixtures
 ```
 
 ## Data flow
@@ -86,7 +86,7 @@ New memo syncs from iPhone → appears in the Recordings folder
         │
 launchd fires (WatchPaths on the folder, OR the hourly sweep)
         │
-voice_memo_daemon.py:
+voice_memo_capture.py:
   1. load config.toml (fall back to defaults for missing keys)
   2. query CloudRecordings.db → (id, title, date, duration, path, folder)
   3. for each memo not in the ledger:
@@ -103,7 +103,7 @@ Markdown file appears in the configured output folder
 
 ```toml
 [output]
-dir = "~/VoiceMemoTranscripts"
+dir = "~/Documents/Voice Memo Transcripts"
 filename_format = "{date} {time} - {title}.md"   # tokens: {date} {time} {title} {id}
 mode = "per-memo"                # "per-memo" | "daily-journal"
 
@@ -117,11 +117,11 @@ recordings_dir = "~/Library/Group Containers/group.com.apple.VoiceMemos.shared/R
 on_missing_transcript = "skip"   # "skip" | "placeholder"
 
 [logging]
-file = "~/Library/Logs/voice-memo-daemon.log"
+file = "~/Library/Logs/voice-memo-capture.log"
 level = "info"                   # "debug" | "info" | "warn" | "error"
 ```
 
-- Config is located next to the script, or via `$VOICE_MEMO_DAEMON_CONFIG`.
+- Config is located next to the script, or via `$VOICE_MEMO_CAPTURE_CONFIG`.
 - Missing keys fall back to these documented defaults; a partial or empty
   config still works.
 - `install.sh` copies `config.example.toml` → `config.toml` on first run if
@@ -141,19 +141,19 @@ level = "info"                   # "debug" | "info" | "warn" | "error"
 
 ## Full Disk Access (the one manual step)
 
-The daemon reads a TCC-protected folder, so the **Python interpreter that
-launchd runs** must have Full Disk Access. `install.sh` prints the exact
+The capture service reads a TCC-protected folder, so the **Python interpreter
+that launchd runs** must have Full Disk Access. `install.sh` prints the exact
 binary path to add and walks the user through:
 
 > System Settings → Privacy & Security → Full Disk Access → add `<python3 path>`
 
 This is unavoidable for any tool touching this folder. Everything else is
-automatic. If FDA is absent at runtime, the daemon detects the
+automatic. If FDA is absent at runtime, the service detects the
 `Operation not permitted` error, logs a clear instruction, and exits cleanly.
 
 ## Idempotency & state
 
-A JSON ledger at `~/.local/state/voice-memo-daemon/processed.json` records
+A JSON ledger at `~/.local/state/voice-memo-capture/processed.json` records
 which memo IDs have been written. Re-runs skip ledgered memos. A memo with no
 transcript yet is **not** ledgered, so the next sweep retries it once Apple
 finishes on-device transcription. Safe to run any number of times.
