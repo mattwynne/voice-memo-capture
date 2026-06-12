@@ -1,0 +1,20 @@
+# voice-memo-capture configuration.
+# All keys are optional; anything omitted uses the built-in default shown here.
+
+[output]
+dir = "~/Documents/Voice Memo Transcripts"
+filename_format = "{date} {time} - {title}.md"   # tokens: {date} {time} {title} {id}
+mode = "per-memo"                # "per-memo" | "daily-journal"
+
+[audio]
+handling = "link"                # "link" | "copy"
+
+[source]
+recordings_dir = "~/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
+
+[behavior]
+on_missing_transcript = "skip"   # "skip" | "placeholder"
+
+[logging]
+file = "~/Library/Logs/voice-memo-capture.log"
+level = "info"                   # "debug" | "info" | "warn" | "error"
