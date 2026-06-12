@@ -53,6 +53,15 @@ func TestRenderContainsHeaderAndTranscript(t *testing.T) {
 	}
 }
 
+func TestPlaceholderTranscriptExplainsPendingState(t *testing.T) {
+	body := PlaceholderTranscript()
+	for _, want := range []string{"Transcript pending", "overwritten automatically"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("placeholder missing %q: %s", want, body)
+		}
+	}
+}
+
 func TestWriteCreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	path, err := Write(dir, "{date} {time} - {title}.md", sampleMemo(), "body")

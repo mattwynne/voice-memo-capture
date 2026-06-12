@@ -13,8 +13,11 @@ handling = "link"                # "link" | "copy"
 recordings_dir = "~/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
 
 [behavior]
-on_missing_transcript = "skip"   # "skip" | "placeholder"
+on_missing_transcript = "placeholder"   # "placeholder" | "skip"
 
 [logging]
 file = "~/Library/Logs/voice-memo-capture.log"
 level = "info"                   # "debug" | "info" | "warn" | "error"
+
+[launchd]
+check_interval_seconds = 300      # safety-net sweep interval; WatchPaths still runs on folder changes

@@ -7,8 +7,8 @@ transcript appears in a folder — automatically, with no app to open.
 
 It reads Apple's **on-device** transcript that's embedded in each recording
 (macOS 15+ / iOS 18+), so there's no Whisper, no cloud, and no model download.
-A launchd agent runs the tool whenever the Voice Memos folder changes, plus
-hourly as a safety net.
+A launchd agent runs the tool whenever the Voice Memos folder changes, plus a
+configurable 5-minute safety-net sweep.
 
 ## Requirements
 
@@ -61,17 +61,21 @@ default shown:
 | `output.mode` | `per-memo` | `per-memo` or `daily-journal` |
 | `audio.handling` | `link` | `link` to original audio, or `copy` |
 | `source.recordings_dir` | Voice Memos group container | Override only if Apple moves it |
-| `behavior.on_missing_transcript` | `skip` | `skip` (retry later) or `placeholder` |
+| `behavior.on_missing_transcript` | `placeholder` | Write a pending Markdown file, or `skip` |
 | `logging.file` | `~/Library/Logs/voice-memo-capture.log` | Log path |
 | `logging.level` | `info` | `debug`/`info`/`warn`/`error` |
+| `launchd.check_interval_seconds` | `300` | Safety-net sweep interval; reinstall after changing |
 
 ## How it runs
 
 A launchd agent (`net.mattwynne.voicememocapture`) triggers the tool when the
-recordings folder changes and once an hour. Each run is idempotent: a JSON
-ledger at `~/.local/state/voice-memo-capture/processed.json` records what's
-already written, and memos whose transcript isn't ready yet are retried on the
-next run. Logs go to `~/Library/Logs/voice-memo-capture.log`.
+recordings folder changes and every `launchd.check_interval_seconds` seconds.
+Each run is idempotent: a JSON ledger at
+`~/.local/state/voice-memo-capture/processed.json` records what's already
+written. Memos whose transcript isn't ready yet get a pending Markdown file by
+default and are retried on the next run; once the transcript is ready, the file
+is overwritten with the final text. Logs go to
+`~/Library/Logs/voice-memo-capture.log`.
 
 ## Uninstall
 

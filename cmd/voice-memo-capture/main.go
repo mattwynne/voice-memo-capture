@@ -1,6 +1,6 @@
 // Command voice-memo-capture scans Apple Voice Memos once, extracts each new
 // memo's native transcript, and writes it as Markdown. launchd runs it on a
-// folder-watch + hourly schedule; the process itself just runs once and exits.
+// folder-watch + frequent sweep schedule; the process itself just runs once and exits.
 package main
 
 import (
@@ -85,6 +85,15 @@ func run() error {
 			continue
 		}
 		if !ok {
+			if cfg.Behavior.OnMissingTranscript == "placeholder" {
+				path, err := output.Write(outDir, cfg.Output.FilenameFormat, m.Memo, output.PlaceholderTranscript())
+				if err != nil {
+					log.Printf("memo %d: placeholder write failed: %v", m.ID, err)
+					continue
+				}
+				log.Printf("memo %d: no native transcript yet, wrote placeholder %s", m.ID, path)
+				continue
+			}
 			log.Printf("memo %d: no native transcript yet, will retry", m.ID)
 			continue
 		}

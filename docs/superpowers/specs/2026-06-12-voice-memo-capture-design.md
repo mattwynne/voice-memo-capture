@@ -47,7 +47,7 @@ transcript directly — no Whisper, no cloud, no model downloads.
 | Reuse strategy | **Port** the ~90-line read-only kernel from pedramamini's CC0 script (credit retained); we do not vendor Python |
 | Output target | Plain Markdown folder, one file per memo |
 | Transcription | **Apple native only** — no Whisper dependency |
-| Trigger | launchd **WatchPaths** (instant) + **hourly sweep** (safety net) |
+| Trigger | launchd **WatchPaths** (instant) + configurable sweep interval (default 5 minutes) |
 | Configuration | All tunables in a `config.toml` |
 | Publishing | **Public** GitHub repo under `mattwynne` |
 | License | **MIT** for our code, crediting the original gist |
@@ -133,7 +133,7 @@ standard library.
 ```
 New memo syncs from iPhone → appears in the Recordings folder
         │
-launchd fires (WatchPaths on the folder, OR the hourly sweep)
+launchd fires (WatchPaths on the folder, OR the configured sweep interval)
         │
 voice-memo-capture (runs once):
   1. load config.toml (fall back to defaults for missing keys)
@@ -164,7 +164,7 @@ handling = "link"                # "link" | "copy"
 recordings_dir = "~/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
 
 [behavior]
-on_missing_transcript = "skip"   # "skip" | "placeholder"
+on_missing_transcript = "placeholder"   # "placeholder" | "skip"
 
 [logging]
 file = "~/Library/Logs/voice-memo-capture.log"
@@ -260,7 +260,7 @@ was ported (DB query, audio-path resolution, `tsrp` extractor).
 - **The Full Disk Access step**, called out prominently with the exact path,
   since nothing works without it.
 - Configuration reference (the `config.toml` keys).
-- How it runs (launchd watch + hourly sweep), where logs go.
+- How it runs (launchd watch + configurable sweep), where logs go.
 - Uninstall: `make uninstall`.
 - Credit + link to the original gist.
 

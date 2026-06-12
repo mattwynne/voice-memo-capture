@@ -17,8 +17,11 @@ func TestDefaultsWhenFileMissing(t *testing.T) {
 	if cfg.Audio.Handling != "link" {
 		t.Errorf("Audio.Handling = %q, want link", cfg.Audio.Handling)
 	}
-	if cfg.Behavior.OnMissingTranscript != "skip" {
-		t.Errorf("OnMissingTranscript = %q, want skip", cfg.Behavior.OnMissingTranscript)
+	if cfg.Behavior.OnMissingTranscript != "placeholder" {
+		t.Errorf("OnMissingTranscript = %q, want placeholder", cfg.Behavior.OnMissingTranscript)
+	}
+	if cfg.Launchd.CheckIntervalSeconds != 300 {
+		t.Errorf("CheckIntervalSeconds = %d, want 300", cfg.Launchd.CheckIntervalSeconds)
 	}
 }
 
@@ -37,6 +40,9 @@ func TestPartialConfigMergesOverDefaults(t *testing.T) {
 	}
 	if cfg.Audio.Handling != "link" {
 		t.Errorf("Audio.Handling = %q, want link (default)", cfg.Audio.Handling)
+	}
+	if cfg.Launchd.CheckIntervalSeconds != 300 {
+		t.Errorf("CheckIntervalSeconds = %d, want 300 (default)", cfg.Launchd.CheckIntervalSeconds)
 	}
 }
 

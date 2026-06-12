@@ -10,6 +10,33 @@ LOG="$HOME/Library/Logs/voice-memo-capture.log"
 WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
 AGENT="$HOME/Library/LaunchAgents/net.mattwynne.voicememocapture.plist"
 
+check_interval_seconds() {
+  local value
+  value="$(awk -F= '
+    {
+      line = $0
+      sub(/[[:space:]]*#.*/, "", line)
+      if (line ~ /^[[:space:]]*\[/) {
+        section = line
+        gsub(/^[[:space:]]*\[|\][[:space:]]*$/, "", section)
+        next
+      }
+      if (section == "launchd" && line ~ /^[[:space:]]*check_interval_seconds[[:space:]]*=/) {
+        sub(/^[^=]*=/, "", line)
+        gsub(/[[:space:]\"]/, "", line)
+        print line
+        exit
+      }
+    }
+  ' "$CONFIG")"
+
+  if [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -gt 0 ]; then
+    printf '%s\n' "$value"
+  else
+    printf '300\n'
+  fi
+}
+
 assist_full_disk_access() {
   if [ "${VMC_SKIP_FDA_PROMPT:-}" = "1" ] || [ ! -t 0 ]; then
     cat <<EOF
@@ -82,11 +109,15 @@ else
   echo "    keeping existing $CONFIG"
 fi
 
+INTERVAL="$(check_interval_seconds)"
+
 echo "==> Installing LaunchAgent"
+echo "    sweep interval: ${INTERVAL}s"
 mkdir -p "$HOME/Library/LaunchAgents"
 sed -e "s|__BINARY__|$BINARY|g" \
     -e "s|__WATCHDIR__|$WATCHDIR|g" \
     -e "s|__LOG__|$LOG|g" \
+    -e "s|<integer>300</integer>|<integer>$INTERVAL</integer>|g" \
     "$REPO_DIR/net.mattwynne.voicememocapture.plist" > "$AGENT"
 
 assist_full_disk_access

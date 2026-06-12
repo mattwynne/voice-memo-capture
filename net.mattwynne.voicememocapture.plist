@@ -12,7 +12,7 @@
   <key>RunAtLoad</key>
   <true/>
   <key>StartInterval</key>
-  <integer>3600</integer>
+  <integer>300</integer>
   <key>WatchPaths</key>
   <array>
     <string>__WATCHDIR__</string>

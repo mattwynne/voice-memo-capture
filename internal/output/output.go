@@ -72,6 +72,13 @@ func Render(m Memo, transcript string) string {
 	return b.String()
 }
 
+// PlaceholderTranscript returns the body used while Apple is still preparing
+// the native transcript. The memo is intentionally not marked processed, so a
+// later run will overwrite this file with the real transcript.
+func PlaceholderTranscript() string {
+	return "_Transcript pending._\n\nApple is still processing the native Voice Memos transcript. This file will be overwritten automatically when the transcript is ready."
+}
+
 func formatDuration(d time.Duration) string {
 	total := int(d.Round(time.Second).Seconds())
 	return fmt.Sprintf("%02d:%02d", total/60, total%60)
