@@ -18,6 +18,3 @@ on_missing_transcript = "placeholder"   # "placeholder" | "skip"
 [logging]
 file = "~/Library/Logs/voice-memo-capture.log"
 level = "info"                   # "debug" | "info" | "warn" | "error"
-
-[launchd]
-check_interval_seconds = 300      # safety-net sweep interval; WatchPaths still runs on folder changes

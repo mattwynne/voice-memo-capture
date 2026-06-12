@@ -21,7 +21,6 @@ need() {
 need curl
 need tar
 need go
-need make
 
 cat <<EOF
 ==> Installing voice-memo-capture from GitHub
@@ -45,8 +44,8 @@ cd "$SRC_DIR"
 # curl | bash gives this script a pipe on stdin. Reattach /dev/tty for the
 # repo installer so it can pause while the user grants Full Disk Access.
 if [ -r /dev/tty ]; then
-  make install </dev/tty
+  ./install.sh "$@" </dev/tty
 else
   echo "warning: no /dev/tty available; Full Disk Access prompt will be skipped" >&2
-  make install
+  ./install.sh "$@"
 fi

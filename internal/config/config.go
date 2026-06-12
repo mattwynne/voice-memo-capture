@@ -31,9 +31,6 @@ type Config struct {
 		File  string `toml:"file"`
 		Level string `toml:"level"`
 	} `toml:"logging"`
-	Launchd struct {
-		CheckIntervalSeconds int `toml:"check_interval_seconds"`
-	} `toml:"launchd"`
 }
 
 // Defaults returns the documented default configuration.
@@ -47,7 +44,6 @@ func Defaults() Config {
 	c.Behavior.OnMissingTranscript = "placeholder"
 	c.Logging.File = "~/Library/Logs/voice-memo-capture.log"
 	c.Logging.Level = "info"
-	c.Launchd.CheckIntervalSeconds = 300
 	return c
 }
 

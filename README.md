@@ -7,8 +7,8 @@ transcript appears in a folder — automatically, with no app to open.
 
 It reads Apple's **on-device** transcript that's embedded in each recording
 (macOS 15+ / iOS 18+), so there's no Whisper, no cloud, and no model download.
-A launchd agent runs the tool whenever the Voice Memos folder changes, plus a
-configurable 5-minute safety-net sweep.
+A launchd agent runs the tool whenever the Voice Memos folder changes, plus an
+installer-configured safety-net sweep that defaults to 5 minutes.
 
 ## Requirements
 
@@ -24,6 +24,13 @@ curl -fsSL https://raw.githubusercontent.com/mattwynne/voice-memo-capture/main/i
 The installer downloads the latest source from GitHub, builds the binary to
 `~/.local/bin/voice-memo-capture`, writes a default config, helps you grant
 Full Disk Access, verifies access, and loads the launchd agent.
+
+By default launchd also runs a safety-net sweep every 300 seconds. To choose a
+different interval:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mattwynne/voice-memo-capture/main/install-from-github.sh | bash -s -- --interval 60
+```
 
 If you prefer to inspect the source first:
 
@@ -64,13 +71,13 @@ default shown:
 | `behavior.on_missing_transcript` | `placeholder` | Write a pending Markdown file, or `skip` |
 | `logging.file` | `~/Library/Logs/voice-memo-capture.log` | Log path |
 | `logging.level` | `info` | `debug`/`info`/`warn`/`error` |
-| `launchd.check_interval_seconds` | `300` | Safety-net sweep interval; reinstall after changing |
 
 ## How it runs
 
 A launchd agent (`net.mattwynne.voicememocapture`) triggers the tool when the
-recordings folder changes and every `launchd.check_interval_seconds` seconds.
-Each run is idempotent: a JSON ledger at
+recordings folder changes and at the interval chosen during installation with
+`./install.sh --interval SECONDS` (default: 300 seconds). Each run is
+idempotent: a JSON ledger at
 `~/.local/state/voice-memo-capture/processed.json` records what's already
 written. Memos whose transcript isn't ready yet get a pending Markdown file by
 default and are retried on the next run; once the transcript is ready, the file

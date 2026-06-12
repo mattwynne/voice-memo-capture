@@ -9,33 +9,51 @@ CONFIG="$CONFIG_DIR/config.toml"
 LOG="$HOME/Library/Logs/voice-memo-capture.log"
 WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
 AGENT="$HOME/Library/LaunchAgents/net.mattwynne.voicememocapture.plist"
+INTERVAL="${VMC_CHECK_INTERVAL_SECONDS:-300}"
 
-check_interval_seconds() {
-  local value
-  value="$(awk -F= '
-    {
-      line = $0
-      sub(/[[:space:]]*#.*/, "", line)
-      if (line ~ /^[[:space:]]*\[/) {
-        section = line
-        gsub(/^[[:space:]]*\[|\][[:space:]]*$/, "", section)
-        next
-      }
-      if (section == "launchd" && line ~ /^[[:space:]]*check_interval_seconds[[:space:]]*=/) {
-        sub(/^[^=]*=/, "", line)
-        gsub(/[[:space:]\"]/, "", line)
-        print line
-        exit
-      }
-    }
-  ' "$CONFIG")"
+usage() {
+  cat <<EOF
+Usage: ./install.sh [--interval SECONDS]
 
-  if [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -gt 0 ]; then
-    printf '%s\n' "$value"
-  else
-    printf '300\n'
-  fi
+Options:
+  --interval SECONDS   Safety-net sweep interval for launchd. Default: 300.
+  -h, --help           Show this help.
+
+Environment:
+  VMC_CHECK_INTERVAL_SECONDS   Alternative way to set --interval.
+EOF
 }
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --interval)
+      if [ "$#" -lt 2 ]; then
+        echo "error: --interval requires a value" >&2
+        exit 2
+      fi
+      INTERVAL="$2"
+      shift 2
+      ;;
+    --interval=*)
+      INTERVAL="${1#--interval=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ! [[ "$INTERVAL" =~ ^[0-9]+$ ]] || [ "$INTERVAL" -le 0 ]; then
+  echo "error: --interval must be a positive number of seconds" >&2
+  exit 2
+fi
 
 assist_full_disk_access() {
   if [ "${VMC_SKIP_FDA_PROMPT:-}" = "1" ] || [ ! -t 0 ]; then
@@ -108,8 +126,6 @@ if [ ! -f "$CONFIG" ]; then
 else
   echo "    keeping existing $CONFIG"
 fi
-
-INTERVAL="$(check_interval_seconds)"
 
 echo "==> Installing LaunchAgent"
 echo "    sweep interval: ${INTERVAL}s"
