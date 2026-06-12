@@ -8,7 +8,8 @@ CONFIG_DIR="$HOME/.config/voice-memo-capture"
 CONFIG="$CONFIG_DIR/config.toml"
 LOG="$HOME/Library/Logs/voice-memo-capture.log"
 WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
-AGENT="$HOME/Library/LaunchAgents/net.mattwynne.voicememocapture.plist"
+LABEL="net.mattwynne.voicememocapture"
+AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
 INTERVAL="${VMC_CHECK_INTERVAL_SECONDS:-300}"
 
 usage() {
@@ -91,17 +92,21 @@ EOF
 }
 
 verify_access() {
-  echo "==> Checking Voice Memos Full Disk Access"
+  echo "==> Checking Voice Memos Full Disk Access via launchd"
   mkdir -p "$(dirname "$LOG")"
   touch "$LOG"
   before_size=$(stat -f%z "$LOG" 2>/dev/null || echo 0)
 
-  "$BINARY" || true
+  # Verify the same execution context that will run in normal operation. A
+  # direct Terminal/shell run can report a false TCC denial even when launchd is
+  # allowed to read the Voice Memos container.
+  launchctl kickstart -k "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  sleep 2
 
   new_log=$(tail -c +$((before_size + 1)) "$LOG" 2>/dev/null || true)
   if printf '%s' "$new_log" | grep -q "Full Disk Access not granted"; then
     cat <<EOF
-    ❌ Full Disk Access is still blocked.
+    ❌ Full Disk Access is still blocked for the LaunchAgent.
 
     Add this exact binary, then enable its toggle:
       $BINARY
@@ -111,7 +116,18 @@ EOF
     return 1
   fi
 
-  echo "    ✅ Full Disk Access check passed. Logs: $LOG"
+  if [ -z "$new_log" ]; then
+    cat <<EOF
+    ⚠️  The LaunchAgent did not write a verification log entry.
+
+    Check manually:
+      launchctl print gui/$(id -u)/$LABEL
+      tail -n 50 $LOG
+EOF
+    return 1
+  fi
+
+  echo "    ✅ launchd Full Disk Access check passed. Logs: $LOG"
   return 0
 }
 
@@ -184,11 +200,11 @@ sed -e "s|__BINARY__|$BINARY|g" \
     "$REPO_DIR/net.mattwynne.voicememocapture.plist" > "$AGENT"
 
 assist_full_disk_access
-verify_access_with_retry
 
-# reload cleanly if already loaded
+# reload cleanly if already loaded, then verify the launchd execution context
 launchctl unload "$AGENT" 2>/dev/null || true
 launchctl load -w "$AGENT"
+verify_access_with_retry
 
 cat <<EOF
 
