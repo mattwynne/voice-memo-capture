@@ -91,7 +91,7 @@ EOF
 }
 
 verify_access() {
-  echo "==> Checking Voice Memos access"
+  echo "==> Checking Voice Memos Full Disk Access"
   mkdir -p "$(dirname "$LOG")"
   touch "$LOG"
   before_size=$(stat -f%z "$LOG" 2>/dev/null || echo 0)
@@ -101,14 +101,48 @@ verify_access() {
   new_log=$(tail -c +$((before_size + 1)) "$LOG" 2>/dev/null || true)
   if printf '%s' "$new_log" | grep -q "Full Disk Access not granted"; then
     cat <<EOF
-    Still blocked by macOS Full Disk Access.
-    You can finish setup later by adding:
+    ❌ Full Disk Access is still blocked.
+
+    Add this exact binary, then enable its toggle:
       $BINARY
+
     Logs: $LOG
 EOF
-  else
-    echo "    Voice Memos access check completed. Logs: $LOG"
+    return 1
   fi
+
+  echo "    ✅ Full Disk Access check passed. Logs: $LOG"
+  return 0
+}
+
+verify_access_with_retry() {
+  if verify_access; then
+    return 0
+  fi
+
+  if [ "${VMC_SKIP_FDA_PROMPT:-}" = "1" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+
+  while true; do
+    printf "\nOpen Full Disk Access again and retry? [Y/n]: "
+    read -r answer
+    case "${answer:-Y}" in
+      y|Y|yes|YES)
+        assist_full_disk_access
+        if verify_access; then
+          return 0
+        fi
+        ;;
+      n|N|no|NO)
+        echo "    Continuing install, but transcripts will not update until FDA is fixed."
+        return 0
+        ;;
+      *)
+        echo "    Please answer y or n."
+        ;;
+    esac
+  done
 }
 
 echo "==> Building"
@@ -150,7 +184,7 @@ sed -e "s|__BINARY__|$BINARY|g" \
     "$REPO_DIR/net.mattwynne.voicememocapture.plist" > "$AGENT"
 
 assist_full_disk_access
-verify_access
+verify_access_with_retry
 
 # reload cleanly if already loaded
 launchctl unload "$AGENT" 2>/dev/null || true
