@@ -125,6 +125,19 @@ if [ ! -f "$CONFIG" ]; then
   echo "    wrote $CONFIG"
 else
   echo "    keeping existing $CONFIG"
+  # Migrate the old generated default so existing installs get pending files.
+  # If the user customized this line differently, leave it alone.
+  python3 - "$CONFIG" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+old = 'on_missing_transcript = "skip"   # "skip" | "placeholder"'
+new = 'on_missing_transcript = "placeholder"   # "placeholder" | "skip"'
+if old in text:
+    path.write_text(text.replace(old, new))
+    print(f"    migrated {path}: on_missing_transcript = placeholder")
+PY
 fi
 
 echo "==> Installing LaunchAgent"
