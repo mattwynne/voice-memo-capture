@@ -27,6 +27,15 @@ type Config struct {
 	Behavior struct {
 		OnMissingTranscript string `toml:"on_missing_transcript"`
 	} `toml:"behavior"`
+	Whisper struct {
+		Binary         string `toml:"binary"`
+		Model          string `toml:"model"`
+		Language       string `toml:"language"`
+		Threads        int    `toml:"threads"`
+		When           string `toml:"when"`
+		TimeoutSeconds int    `toml:"timeout_seconds"`
+		KeepWAV        bool   `toml:"keep_wav"`
+	} `toml:"whisper"`
 	Logging struct {
 		File  string `toml:"file"`
 		Level string `toml:"level"`
@@ -42,6 +51,10 @@ func Defaults() Config {
 	c.Audio.Handling = "link"
 	c.Source.RecordingsDir = "~/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
 	c.Behavior.OnMissingTranscript = "placeholder"
+	c.Whisper.Binary = "whisper-cli"
+	c.Whisper.Language = "en"
+	c.Whisper.When = "apple-missing"
+	c.Whisper.TimeoutSeconds = 1800
 	c.Logging.File = "~/Library/Logs/voice-memo-capture.log"
 	c.Logging.Level = "info"
 	return c
@@ -62,6 +75,13 @@ func Load(path string) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// WhisperEnabled reports whether local Whisper fallback is configured. A model
+// path is the opt-in signal; omitted [whisper] sections preserve Apple-only
+// behaviour for existing installs.
+func (c Config) WhisperEnabled() bool {
+	return strings.TrimSpace(c.Whisper.Model) != ""
 }
 
 // ExpandUser expands a leading "~/" to the user's home directory.

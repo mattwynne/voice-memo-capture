@@ -6,14 +6,16 @@ Record a voice memo on your iPhone; once it syncs to your Mac, a Markdown
 transcript appears in a folder — automatically, with no app to open.
 
 It reads Apple's **on-device** transcript that's embedded in each recording
-(macOS 15+ / iOS 18+), so there's no Whisper, no cloud, and no model download.
-A launchd agent runs the tool whenever the Voice Memos folder changes, plus an
-installer-configured safety-net sweep that defaults to 5 minutes.
+(macOS 15+ / iOS 18+). Optionally, it can fall back to local `whisper.cpp`
+when Apple's transcript is missing or malformed. A launchd agent runs the tool
+whenever the Voice Memos folder changes, plus an installer-configured safety-net
+sweep that defaults to 5 minutes.
 
 ## Requirements
 
 - macOS 15+ (for Apple's native transcripts) — developed on macOS 26.
 - [Go](https://go.dev/dl/) 1.23+ to build.
+- Optional fallback: `brew install whisper-cpp` for `whisper-cli`.
 
 ## Install
 
@@ -25,12 +27,26 @@ The installer downloads the latest source from GitHub, builds the binary to
 `~/.local/bin/voice-memo-capture`, writes a default config, helps you grant
 Full Disk Access, verifies access, and loads the launchd agent.
 
+Interactive installs ask whether to enable local Whisper fallback; the default
+is yes. If enabled and `whisper-cli` is missing, the installer can install
+`whisper-cpp` with Homebrew for you. It then downloads a `base.en` GGML model to
+`~/.local/share/voice-memo-capture/models` and writes the `[whisper]` config
+section.
+
 By default launchd also runs a safety-net sweep every 300 seconds. To choose a
 different interval:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mattwynne/voice-memo-capture/main/install-from-github.sh | bash -s -- --interval 60
 ```
+
+For non-interactive installs, enable Whisper explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mattwynne/voice-memo-capture/main/install-from-github.sh | bash -s -- --with-whisper --whisper-model small.en
+```
+
+Available models: `tiny.en`, `base.en` (default), `small.en`.
 
 If you prefer to inspect the source first:
 
@@ -69,6 +85,11 @@ default shown:
 | `audio.handling` | `link` | `link` to original audio, or `copy` |
 | `source.recordings_dir` | Voice Memos group container | Override only if Apple moves it |
 | `behavior.on_missing_transcript` | `placeholder` | Write a pending Markdown file, or `skip` |
+| `whisper.model` | unset | Enables local Whisper fallback when set |
+| `whisper.binary` | `whisper-cli` | whisper.cpp CLI binary |
+| `whisper.language` | `en` | Language passed to Whisper |
+| `whisper.when` | `apple-missing` | `apple-missing`, `apple-error`, or `always` |
+| `whisper.timeout_seconds` | `1800` | Per-memo Whisper timeout |
 | `logging.file` | `~/Library/Logs/voice-memo-capture.log` | Log path |
 | `logging.level` | `info` | `debug`/`info`/`warn`/`error` |
 
@@ -81,7 +102,8 @@ idempotent: a JSON ledger at
 `~/.local/state/voice-memo-capture/processed.json` records what's already
 written. Memos whose transcript isn't ready yet get a pending Markdown file by
 default and are retried on the next run; once the transcript is ready, the file
-is overwritten with the final text. Logs go to
+is overwritten with the final text. The Markdown metadata records whether the
+transcript came from Apple Voice Memos or local Whisper. Logs go to
 `~/Library/Logs/voice-memo-capture.log`.
 
 ## Uninstall

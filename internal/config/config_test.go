@@ -38,6 +38,36 @@ func TestPartialConfigMergesOverDefaults(t *testing.T) {
 	if cfg.Audio.Handling != "link" {
 		t.Errorf("Audio.Handling = %q, want link (default)", cfg.Audio.Handling)
 	}
+	if cfg.WhisperEnabled() {
+		t.Error("WhisperEnabled true without a configured model")
+	}
+}
+
+func TestPartialWhisperConfigMergesOverDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("[whisper]\nmodel = \"~/models/base.bin\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.WhisperEnabled() {
+		t.Fatal("WhisperEnabled false with a configured model")
+	}
+	if cfg.Whisper.Binary != "whisper-cli" {
+		t.Errorf("Whisper.Binary = %q, want whisper-cli", cfg.Whisper.Binary)
+	}
+	if cfg.Whisper.Language != "en" {
+		t.Errorf("Whisper.Language = %q, want en", cfg.Whisper.Language)
+	}
+	if cfg.Whisper.When != "apple-missing" {
+		t.Errorf("Whisper.When = %q, want apple-missing", cfg.Whisper.When)
+	}
+	if cfg.Whisper.TimeoutSeconds != 1800 {
+		t.Errorf("Whisper.TimeoutSeconds = %d, want 1800", cfg.Whisper.TimeoutSeconds)
+	}
 }
 
 func TestExpandUserExpandsTilde(t *testing.T) {

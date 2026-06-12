@@ -11,14 +11,20 @@ WATCHDIR="$HOME/Library/Group Containers/group.com.apple.VoiceMemos.shared/Recor
 LABEL="net.mattwynne.voicememocapture"
 AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
 INTERVAL="${VMC_CHECK_INTERVAL_SECONDS:-300}"
+WHISPER_CHOICE="auto"
+WHISPER_MODEL="base.en"
+MODEL_DIR="$HOME/.local/share/voice-memo-capture/models"
 
 usage() {
   cat <<EOF
-Usage: ./install.sh [--interval SECONDS]
+Usage: ./install.sh [--interval SECONDS] [--with-whisper|--without-whisper] [--whisper-model MODEL]
 
 Options:
-  --interval SECONDS   Safety-net sweep interval for launchd. Default: 300.
-  -h, --help           Show this help.
+  --interval SECONDS       Safety-net sweep interval for launchd. Default: 300.
+  --with-whisper           Configure local whisper.cpp fallback.
+  --without-whisper        Do not configure local Whisper fallback.
+  --whisper-model MODEL    Whisper model to download: tiny.en, base.en, or small.en. Default: base.en.
+  -h, --help               Show this help.
 
 Environment:
   VMC_CHECK_INTERVAL_SECONDS   Alternative way to set --interval.
@@ -39,6 +45,26 @@ while [ "$#" -gt 0 ]; do
       INTERVAL="${1#--interval=}"
       shift
       ;;
+    --with-whisper)
+      WHISPER_CHOICE="yes"
+      shift
+      ;;
+    --without-whisper)
+      WHISPER_CHOICE="no"
+      shift
+      ;;
+    --whisper-model)
+      if [ "$#" -lt 2 ]; then
+        echo "error: --whisper-model requires a value" >&2
+        exit 2
+      fi
+      WHISPER_MODEL="$2"
+      shift 2
+      ;;
+    --whisper-model=*)
+      WHISPER_MODEL="${1#--whisper-model=}"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -55,6 +81,129 @@ if ! [[ "$INTERVAL" =~ ^[0-9]+$ ]] || [ "$INTERVAL" -le 0 ]; then
   echo "error: --interval must be a positive number of seconds" >&2
   exit 2
 fi
+
+case "$WHISPER_MODEL" in
+  tiny.en|base.en|small.en) ;;
+  *)
+    echo "error: --whisper-model must be one of: tiny.en, base.en, small.en" >&2
+    exit 2
+    ;;
+esac
+
+configure_whisper_choice() {
+  if [ "$WHISPER_CHOICE" != "auto" ]; then
+    return
+  fi
+  if [ -t 0 ]; then
+    cat <<EOF
+
+Apple's native Voice Memos transcripts can stay pending for a long time or fail
+silently. Local Whisper fallback can transcribe those memos on this Mac instead,
+using whisper.cpp and a downloaded model. It is private/local, but uses CPU/GPU
+time and disk space for the model.
+EOF
+    printf "Enable local Whisper fallback? [Y/n]: "
+    read -r answer
+    case "${answer:-Y}" in
+      y|Y|yes|YES) WHISPER_CHOICE="yes" ;;
+      n|N|no|NO) WHISPER_CHOICE="no" ;;
+      *) WHISPER_CHOICE="yes" ;;
+    esac
+  else
+    WHISPER_CHOICE="no"
+  fi
+}
+
+install_whisper_config() {
+  [ "$WHISPER_CHOICE" = "yes" ] || return 0
+
+  echo "==> Configuring local Whisper fallback"
+  if ! command -v whisper-cli >/dev/null 2>&1; then
+    cat <<EOF
+
+whisper-cli was not found. It comes from Homebrew's whisper-cpp package:
+  brew install whisper-cpp
+EOF
+    if [ -t 0 ] && command -v brew >/dev/null 2>&1; then
+      printf "Install whisper-cpp with Homebrew now? [Y/n]: "
+      read -r answer
+      case "${answer:-Y}" in
+        y|Y|yes|YES)
+          brew install whisper-cpp
+          ;;
+        *)
+          echo "Skipping Whisper setup. You can rerun later with: ./install.sh --with-whisper"
+          WHISPER_CHOICE="no"
+          return 0
+          ;;
+      esac
+    else
+      cat <<EOF >&2
+error: cannot continue Whisper setup without whisper-cli.
+Install it, then rerun:
+  brew install whisper-cpp
+  ./install.sh --with-whisper
+EOF
+      exit 1
+    fi
+  fi
+  if ! command -v whisper-cli >/dev/null 2>&1; then
+    echo "error: whisper-cli still was not found after install attempt" >&2
+    exit 1
+  fi
+  whisper_binary="$(command -v whisper-cli)"
+  if ! "$whisper_binary" --help >/dev/null 2>&1; then
+    echo "error: whisper-cli --help failed" >&2
+    exit 1
+  fi
+  if ! command -v afconvert >/dev/null 2>&1; then
+    echo "error: afconvert was not found; it is required to prepare audio for Whisper" >&2
+    exit 1
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "error: curl was not found; it is required to download the Whisper model" >&2
+    exit 1
+  fi
+
+  mkdir -p "$MODEL_DIR"
+  model_file="$MODEL_DIR/ggml-$WHISPER_MODEL.bin"
+  if [ ! -f "$model_file" ]; then
+    cat <<EOF
+
+Whisper needs a GGML model file. The installer will download:
+  ggml-$WHISPER_MODEL.bin
+
+to:
+  $model_file
+EOF
+    curl -fL --progress-bar "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WHISPER_MODEL.bin" -o "$model_file"
+  else
+    echo "    model already exists: $model_file"
+  fi
+  if [ ! -f "$model_file" ]; then
+    echo "error: model file missing after download: $model_file" >&2
+    exit 1
+  fi
+
+  python3 - "$CONFIG" "$model_file" "$whisper_binary" <<'PY'
+from pathlib import Path
+import re
+import sys
+path = Path(sys.argv[1])
+model = sys.argv[2]
+text = path.read_text() if path.exists() else ""
+binary = sys.argv[3]
+section = f'''[whisper]\nbinary = "{binary}"\nmodel = "{model}"\nlanguage = "en"\nthreads = 0\nwhen = "apple-missing"\ntimeout_seconds = 1800\nkeep_wav = false\n'''
+if re.search(r'(?ms)^\[whisper\]\n.*?(?=^\[|\Z)', text):
+    text = re.sub(r'(?ms)^\[whisper\]\n.*?(?=^\[|\Z)', section + "\n", text)
+else:
+    if text and not text.endswith("\n"):
+        text += "\n"
+    text += "\n" + section
+path.write_text(text)
+print(f"    updated {path}: [whisper]")
+PY
+}
 
 assist_full_disk_access() {
   if [ "${VMC_SKIP_FDA_PROMPT:-}" = "1" ] || [ ! -t 0 ]; then
@@ -168,6 +317,8 @@ mkdir -p "$BIN_DIR"
 echo "==> Ad-hoc code-signing (stable-ish TCC identity)"
 codesign --force -s - "$BINARY"
 
+configure_whisper_choice
+
 echo "==> Installing config (if absent)"
 mkdir -p "$CONFIG_DIR"
 if [ ! -f "$CONFIG" ]; then
@@ -189,6 +340,8 @@ if old in text:
     print(f"    migrated {path}: on_missing_transcript = placeholder")
 PY
 fi
+
+install_whisper_config
 
 echo "==> Installing LaunchAgent"
 echo "    sweep interval: ${INTERVAL}s"

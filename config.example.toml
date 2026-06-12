@@ -15,6 +15,16 @@ recordings_dir = "~/Library/Group Containers/group.com.apple.VoiceMemos.shared/R
 [behavior]
 on_missing_transcript = "placeholder"   # "placeholder" | "skip"
 
+# Optional local Whisper fallback. Enabled only when model is set.
+# [whisper]
+# binary = "whisper-cli"
+# model = "~/.local/share/voice-memo-capture/models/ggml-base.en.bin"
+# language = "en"
+# threads = 0                     # 0 = whisper.cpp default
+# when = "apple-missing"          # "apple-missing" | "apple-error" | "always"
+# timeout_seconds = 1800
+# keep_wav = false
+
 [logging]
 file = "~/Library/Logs/voice-memo-capture.log"
 level = "info"                   # "debug" | "info" | "warn" | "error"

@@ -44,6 +44,7 @@ func TestRenderContainsHeaderAndTranscript(t *testing.T) {
 		"# Idea about / the thing",
 		"- Date: 2026-06-12 14:30",
 		"- Duration: 01:35",
+		"- Transcript: Apple Voice Memos",
 		"file://",
 		"the transcript body",
 	} {
@@ -55,7 +56,7 @@ func TestRenderContainsHeaderAndTranscript(t *testing.T) {
 
 func TestPlaceholderTranscriptExplainsPendingState(t *testing.T) {
 	body := PlaceholderTranscript()
-	for _, want := range []string{"Transcript pending", "overwritten automatically"} {
+	for _, want := range []string{"Transcript pending", "local Whisper", "overwritten automatically"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("placeholder missing %q: %s", want, body)
 		}

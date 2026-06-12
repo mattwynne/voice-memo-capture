@@ -54,8 +54,22 @@ func sanitizeTitle(title string) string {
 	return t
 }
 
+type TranscriptSource string
+
+const (
+	SourceApple   TranscriptSource = "Apple Voice Memos"
+	SourceWhisper TranscriptSource = "Whisper (local)"
+	SourcePending TranscriptSource = "Pending"
+)
+
 // Render returns the Markdown document for a memo and its transcript.
 func Render(m Memo, transcript string) string {
+	return RenderWithSource(m, transcript, SourceApple)
+}
+
+// RenderWithSource returns the Markdown document for a memo, including the
+// transcript source in the metadata.
+func RenderWithSource(m Memo, transcript string, source TranscriptSource) string {
 	title := strings.TrimSpace(m.Title)
 	if title == "" {
 		title = "Untitled"
@@ -66,6 +80,7 @@ func Render(m Memo, transcript string) string {
 	fmt.Fprintf(&b, "# %s\n\n", title)
 	fmt.Fprintf(&b, "- Date: %s\n", m.Date.Local().Format("2006-01-02 15:04"))
 	fmt.Fprintf(&b, "- Duration: %s\n", formatDuration(m.Duration))
+	fmt.Fprintf(&b, "- Transcript: %s\n", source)
 	fmt.Fprintf(&b, "- Audio: [%s](%s)\n\n", filename, audioURL)
 	b.WriteString(strings.TrimSpace(transcript))
 	b.WriteString("\n")
@@ -76,7 +91,7 @@ func Render(m Memo, transcript string) string {
 // the native transcript. The memo is intentionally not marked processed, so a
 // later run will overwrite this file with the real transcript.
 func PlaceholderTranscript() string {
-	return "_Transcript pending._\n\nApple is still processing the native Voice Memos transcript. This file will be overwritten automatically when the transcript is ready."
+	return "_Transcript pending._\n\nApple has not produced a native transcript yet, and local Whisper has not completed successfully. This file will be overwritten automatically when a transcript is ready."
 }
 
 func formatDuration(d time.Duration) string {
@@ -86,11 +101,17 @@ func formatDuration(d time.Duration) string {
 
 // Write renders the memo and writes it under dir, returning the file path.
 func Write(dir, format string, m Memo, transcript string) (string, error) {
+	return WriteWithSource(dir, format, m, transcript, SourceApple)
+}
+
+// WriteWithSource renders the memo with the given transcript source and writes
+// it under dir, returning the file path.
+func WriteWithSource(dir, format string, m Memo, transcript string, source TranscriptSource) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, Filename(format, m))
-	if err := os.WriteFile(path, []byte(Render(m, transcript)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(RenderWithSource(m, transcript, source)), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil

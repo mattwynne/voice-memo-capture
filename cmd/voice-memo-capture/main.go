@@ -4,17 +4,21 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/mattwynne/voice-memo-capture/internal/audio"
 	"github.com/mattwynne/voice-memo-capture/internal/config"
 	"github.com/mattwynne/voice-memo-capture/internal/ledger"
 	"github.com/mattwynne/voice-memo-capture/internal/memos"
 	"github.com/mattwynne/voice-memo-capture/internal/output"
 	"github.com/mattwynne/voice-memo-capture/internal/transcript"
+	"github.com/mattwynne/voice-memo-capture/internal/whisper"
 )
 
 func configPath() string {
@@ -80,31 +84,50 @@ func run() error {
 			continue
 		}
 		text, ok, err := transcript.Extract(m.AudioPath)
-		if err != nil {
-			log.Printf("memo %d: transcript error: %v", m.ID, err)
-			continue
-		}
-		if !ok {
-			if cfg.Behavior.OnMissingTranscript == "placeholder" {
-				path, err := output.Write(outDir, cfg.Output.FilenameFormat, m.Memo, output.PlaceholderTranscript())
-				if err != nil {
-					log.Printf("memo %d: placeholder write failed: %v", m.ID, err)
-					continue
-				}
-				log.Printf("memo %d: no native transcript yet, wrote placeholder %s", m.ID, path)
+		if err == nil && ok {
+			path, err := output.WriteWithSource(outDir, cfg.Output.FilenameFormat, m.Memo, text, output.SourceApple)
+			if err != nil {
+				log.Printf("memo %d: write failed: %v", m.ID, err)
 				continue
 			}
-			log.Printf("memo %d: no native transcript yet, will retry", m.ID)
+			led.Add(m.ID)
+			written++
+			log.Printf("memo %d: wrote %s", m.ID, path)
 			continue
 		}
-		path, err := output.Write(outDir, cfg.Output.FilenameFormat, m.Memo, text)
+
 		if err != nil {
-			log.Printf("memo %d: write failed: %v", m.ID, err)
+			log.Printf("memo %d: native transcript error: %v", m.ID, err)
+		} else {
+			log.Printf("memo %d: no native transcript yet", m.ID)
+		}
+
+		if shouldTryWhisper(cfg, err != nil) {
+			text, werr := runWhisper(context.Background(), cfg, m.AudioPath)
+			if werr == nil {
+				path, err := output.WriteWithSource(outDir, cfg.Output.FilenameFormat, m.Memo, text, output.SourceWhisper)
+				if err != nil {
+					log.Printf("memo %d: write failed: %v", m.ID, err)
+					continue
+				}
+				led.Add(m.ID)
+				written++
+				log.Printf("memo %d: wrote %s using local Whisper", m.ID, path)
+				continue
+			}
+			log.Printf("memo %d: whisper failed: %v", m.ID, werr)
+		}
+
+		if cfg.Behavior.OnMissingTranscript == "placeholder" {
+			path, err := output.WriteWithSource(outDir, cfg.Output.FilenameFormat, m.Memo, output.PlaceholderTranscript(), output.SourcePending)
+			if err != nil {
+				log.Printf("memo %d: placeholder write failed: %v", m.ID, err)
+				continue
+			}
+			log.Printf("memo %d: wrote pending placeholder %s", m.ID, path)
 			continue
 		}
-		led.Add(m.ID)
-		written++
-		log.Printf("memo %d: wrote %s", m.ID, path)
+		log.Printf("memo %d: will retry later", m.ID)
 	}
 
 	if err := led.Save(ledgerPath()); err != nil {
@@ -112,6 +135,42 @@ func run() error {
 	}
 	log.Printf("done: %d new transcript(s) written", written)
 	return nil
+}
+
+func shouldTryWhisper(cfg config.Config, appleErrored bool) bool {
+	if !cfg.WhisperEnabled() {
+		return false
+	}
+	switch cfg.Whisper.When {
+	case "always":
+		return true
+	case "apple-error":
+		return true
+	case "apple-missing", "":
+		return !appleErrored
+	default:
+		log.Printf("unknown whisper.when %q; using apple-missing", cfg.Whisper.When)
+		return !appleErrored
+	}
+}
+
+func runWhisper(ctx context.Context, cfg config.Config, audioPath string) (string, error) {
+	wav, err := audio.New("afconvert").ToTempWAV(ctx, audioPath)
+	if err != nil {
+		return "", err
+	}
+	if !cfg.Whisper.KeepWAV {
+		defer os.Remove(wav)
+	} else {
+		log.Printf("keeping whisper WAV: %s", wav)
+	}
+	return whisper.New(whisper.Config{
+		Binary:   config.ExpandUser(cfg.Whisper.Binary),
+		Model:    config.ExpandUser(cfg.Whisper.Model),
+		Language: cfg.Whisper.Language,
+		Threads:  cfg.Whisper.Threads,
+		Timeout:  time.Duration(cfg.Whisper.TimeoutSeconds) * time.Second,
+	}).Transcribe(ctx, wav)
 }
 
 func openLog(path string) (*os.File, error) {
